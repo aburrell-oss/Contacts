@@ -1,4 +1,2 @@
-/**
- * Package for contact utilities.
- */
+/** Package for contact utilities. */
 package com.griddynamics;
