@@ -1,27 +1,33 @@
 package com.griddynamics;
 
-import java.io.ObjectOutputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.io.Serial;
 import java.io.Serializable;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
 /**
- * Stores a collection of {@link Record} objects and provides
- * methods for adding, editing, deleting, searching, and saving.
+ * Stores a collection of {@link Record}
+ * objects and provides methods for adding,
+ * editing, deleting,
+ * searching, and saving.
  */
 public class Contacts implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /** Stored contact records. */
+    /**
+     * Stored contact records.
+     */
     private List<Record> records = new ArrayList<>();
 
-    /** Filename for persistent storage. */
+    /**
+     * Filename for persistent storage.
+     */
     private String filename;
 
     /**
@@ -74,17 +80,22 @@ public class Contacts implements Serializable {
      * @param scanner input source
      */
     public void addRecord(final Scanner scanner) {
+        if (scanner == null) {
+            throw new IllegalArgumentException("Scanner cannot be null");
+        }
+
         System.out.print("Enter the type (person, organization): ");
         final String type = scanner.nextLine().trim();
 
-        final Record record = switch (type) {
-            case "person" -> Person.create(scanner);
-            case "organization" -> Organization.create(scanner);
-            default -> {
-                System.out.println("Unknown record type.");
-                yield null;
-            }
-        };
+        final Record record =
+                switch (type) {
+                    case "person" -> Person.create(scanner);
+                    case "organization" -> Organization.create(scanner);
+                    default -> {
+                        System.out.println("Unknown record type.");
+                        yield null;
+                    }
+                };
 
         if (record != null) {
             records.add(record);
@@ -93,10 +104,22 @@ public class Contacts implements Serializable {
     }
 
     /**
+     * Adds a record directly to the contacts list.
+     *
+     * @param record the record to add
+     */
+    public void addRecord(final Record record) {
+        if (record == null) {
+            throw new IllegalArgumentException("Record cannot be null");
+        }
+        records.add(record);
+    }
+
+    /**
      * Edits a record at the given index.
      *
      * @param scanner input source
-     * @param index record index
+     * @param index   record index
      */
     public void editRecord(final Scanner scanner, final int index) {
         final Record record = records.get(index);
@@ -144,8 +167,8 @@ public class Contacts implements Serializable {
      */
     public void printShortList(final List<Integer> indexes) {
         for (int i = 0; i < indexes.size(); i++) {
-            System.out.printf("%d. %s%n",
-                    i + 1, records.get(indexes.get(i)).shortInfo());
+            System.out.printf("%d. %s%n", i + 1,
+                    records.get(indexes.get(i)).shortInfo());
         }
     }
 

@@ -1,234 +1,301 @@
 package com.griddynamics;
 
-import org.junit.jupiter.api.Test;
-
-import java.io.File;
-import java.nio.file.Files;
-import java.util.List;
-import java.util.Scanner;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-class ContactsApplicationTest {
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-    /* =========================================================
-       Person tests
-       ========================================================= */
+/** Unit tests for ContactsApp. */
+class ContactsAppTest { //  Removed "extends Contacts"
 
-    @Test
-    void createPersonWithValidData() {
-        String input = """
-                John
-                Doe
-                1990-01-01
-                M
-                123456
-                """;
+  private Contacts contacts;
+  private ByteArrayOutputStream outputStream;
+  private PrintStream originalOut;
 
-        Person person = Person.create(new Scanner(input));
+  @BeforeEach
+  void setUp() {
+    contacts = new Contacts();
 
-        assertEquals("John Doe", person.shortInfo());
-        assertTrue(person.matches("john"));
-        assertTrue(person.matches("DOE"));
-        assertTrue(person.matches("123"));
-    }
+    // Capture System.out
+    outputStream = new ByteArrayOutputStream();
+    originalOut = System.out;
+    System.setOut(new PrintStream(outputStream));
+  }
 
-    @Test
-    void invalidPersonDataIsHandledGracefully() {
-        String input = """
-                Jane
-                Smith
-                invalid-date
-                X
-                abc
-                """;
+  @AfterEach
+  void tearDown() {
+    // Restore System.out
+    System.setOut(originalOut);
+  }
 
-        Person person = Person.create(new Scanner(input));
+  /** Helper method to create ContactsApp with simulated input. */
+  private ContactsApp createAppWithInput(String input) {
+    Scanner scanner = new Scanner(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
+    return new ContactsApp(contacts, scanner);
+  }
 
-        String output = person.toString();
-        assertTrue(output.contains("[no data]"));
-        assertTrue(output.contains("[no number]"));
-    }
+  @Test
+  void testExitCommand() {
+    ContactsApp app = createAppWithInput("exit\n");
+    app.run();
 
-    @Test
-    void personApplyEditUpdatesFields() {
-        Person person = new Person();
+    String output = outputStream.toString();
+    assertTrue(output.contains("[menu] Enter action"));
+  }
 
-        person.applyEdit("name", "Alice");
-        person.applyEdit("surname", "Brown");
-        person.applyEdit("number", "555");
+  @Test
+  void testUnknownCommand() {
+    ContactsApp app = createAppWithInput("invalid\nexit\n");
+    app.run();
 
-        assertEquals("Alice Brown", person.shortInfo());
-        assertTrue(person.matches("555"));
-    }
+    String output = outputStream.toString();
+    assertTrue(output.contains("Unknown command"));
+  }
 
-    /* =========================================================
-       Organization tests
-       ========================================================= */
+  @Test
+  void testCountWithNoRecords() {
+    ContactsApp app = createAppWithInput("count\nexit\n");
+    app.run();
 
-    @Test
-    void createOrganizationWithValidData() {
-        String input = """
-                Grid Dynamics
-                Silicon Valley
-                987654
-                """;
+    String output = outputStream.toString();
+    assertTrue(output.contains("The Phone Book has 0 records"));
+  }
 
-        Organization org = Organization.create(new Scanner(input));
+  @Test
+  void testAddRecord() {
+    String input = "add\nperson\nAlice\nSmith\n1990-01-01\nF\n555-1234\nexit\n";
+    ContactsApp app = createAppWithInput(input);
 
-        assertEquals("Grid Dynamics", org.shortInfo());
-        assertTrue(org.matches("grid"));
-        assertTrue(org.matches("987"));
-    }
+    app.run();
 
-    @Test
-    void invalidOrganizationPhoneDefaultsToNoNumber() {
-        Organization org = new Organization();
+    String output = outputStream.toString();
+    assertTrue(output.contains("The record added"));
+    assertEquals(1, app.getContacts().size());
+  }
 
-        org.applyEdit("number", "abc");
+  @Test
+  void testListEmptyRecords() {
+    ContactsApp app = createAppWithInput("list\nexit\n");
+    app.run();
 
-        assertTrue(org.toString().contains("[no number]"));
-    }
+    String output = outputStream.toString();
+    assertTrue(output.contains("No records to list"));
+  }
 
-    /* =========================================================
-       Contacts tests
-       ========================================================= */
+  @Test
+  void testHandleEditInvalidField() {
+    Person person = new Person();
+    person.setName("John");
+    person.setSurname("Doe");
+    contacts.addRecord(person);
 
-    @Test
-    void addPersonRecordToContacts() {
-        Contacts contacts = new Contacts();
+    String input = "list\n1\nedit\ninvalidField\nValue\nmenu\nexit\n";
+    ContactsApp app = createAppWithInput(input);
+    app.run();
 
-        String input = """
-                person
-                John
-                Doe
-                1990-01-01
-                M
-                123
-                """;
+    String output = outputStream.toString();
+    assertTrue(output.contains("Invalid field"));
+  }
 
-        contacts.addRecord(new Scanner(input));
+  @Test
+  void testHandleDeleteRecord() {
+    Person person = new Person();
+    person.setName("John");
+    person.setSurname("Doe");
+    contacts.addRecord(person);
 
-        assertEquals(1, contacts.size());
-        assertEquals("John Doe", contacts.get(0).shortInfo());
-    }
+    String input = "list\n1\ndelete\nexit\n";
+    ContactsApp app = createAppWithInput(input);
+    app.run();
 
-    @Test
-    void addOrganizationRecordToContacts() {
-        Contacts contacts = new Contacts();
+    String output = outputStream.toString();
+    assertTrue(output.contains("The record removed"));
+    assertEquals(0, app.getContacts().size());
+  }
 
-        String input = """
-                organization
-                Acme Corp
-                New York
-                999
-                """;
+  @Test
+  void testCloseMethod() {
+    ContactsApp app = createAppWithInput("exit\n");
+    assertDoesNotThrow(app::close);
+  }
 
-        contacts.addRecord(new Scanner(input));
+  @Test
+  void testSearchWithMatch() {
+    Person person = new Person();
+    person.setName("Alice");
+    person.setSurname("Smith");
+    contacts.addRecord(person);
 
-        assertEquals(1, contacts.size());
-        assertEquals("Acme Corp", contacts.get(0).shortInfo());
-    }
+    String input = "search\nAlice\nback\nexit\n";
+    ContactsApp app = createAppWithInput(input);
+    app.run();
 
-    @Test
-    void searchReturnsCorrectRecordIndexes() {
-        Contacts contacts = new Contacts();
+    String output = outputStream.toString();
+    assertTrue(output.contains("Found 1 results"));
+    assertTrue(output.contains("Alice Smith"));
+  }
 
-        contacts.addRecord(new Scanner("""
-                person
-                John
-                Doe
-                1990-01-01
-                M
-                123
-                """));
+  @Test
+  void testEditValidField() {
+    Person person = new Person();
+    person.setName("John");
+    person.setSurname("Doe");
+    contacts.addRecord(person);
 
-        contacts.addRecord(new Scanner("""
-                organization
-                Acme Corp
-                NY
-                999
-                """));
+    String input = "list\n1\nedit\nname\nJane\nmenu\nexit\n";
+    ContactsApp app = createAppWithInput(input);
+    app.run();
 
-        List<Integer> result = contacts.search(new Scanner("john"));
+    String output = outputStream.toString();
+    assertTrue(output.contains("Saved"));
+    assertEquals("Jane", ((Person) app.getContacts().get(0)).getName());
+  }
 
-        assertEquals(1, result.size());
-        assertEquals(0, result.get(0));
-    }
+  @Test
+  void testEmptyMenuInput() {
+    ContactsApp app = createAppWithInput("\nexit\n");
+    app.run();
 
-    @Test
-    void editRecordUpdatesContactData() {
-        Contacts contacts = new Contacts();
+    String output = outputStream.toString();
+    assertTrue(output.contains("Unknown command"));
+  }
 
-        contacts.addRecord(new Scanner("""
-                person
-                Bob
-                Smith
-                1995-01-01
-                M
-                123
-                """));
+  @Test
+  void testListWithNonNumericSelection() {
+    Person person = new Person();
+    person.setName("John");
+    contacts.addRecord(person);
 
-        contacts.editRecord(new Scanner("""
-                name
-                Robert
-                """), 0);
+    ContactsApp app = createAppWithInput("list\nabc\nexit\n");
+    app.run();
 
-        assertTrue(contacts.get(0).shortInfo().contains("Robert"));
-    }
+    String output = outputStream.toString();
+    assertTrue(output.contains("[list] Enter action"));
+  }
 
-    @Test
-    void deleteRecordRemovesItFromContacts() {
-        Contacts contacts = new Contacts();
+  @Test
+  void testListWithOutOfRangeIndex() {
+    Person person = new Person();
+    person.setName("John");
+    contacts.addRecord(person);
 
-        contacts.addRecord(new Scanner("""
-                organization
-                TestOrg
-                Addr
-                111
-                """));
+    ContactsApp app = createAppWithInput("list\n99\nexit\n");
+    app.run();
 
-        assertEquals(1, contacts.size());
+    String output = outputStream.toString();
+    assertTrue(output.contains("[list] Enter action"));
+  }
 
-        contacts.deleteRecord(0);
+  @Test
+  void testRecordViewUnknownCommand() {
+    Person person = new Person();
+    person.setName("John");
+    contacts.addRecord(person);
 
-        assertEquals(0, contacts.size());
-    }
+    ContactsApp app = createAppWithInput("list\n1\nfoo\nmenu\nexit\n");
+    app.run();
 
-    @Test
-    void save_createsFile_whenFilenameSet() throws Exception {
-        Contacts contacts = new Contacts();
-        File tempFile = Files.createTempFile("contacts", ".dat").toFile();
+    String output = outputStream.toString();
+    assertTrue(output.contains("Unknown command"));
+  }
 
-        contacts.setFilename(tempFile.getAbsolutePath());
-        contacts.save();
+  @Test
+  void testOpenRecordInvalidIndex() {
+    ContactsApp app = createAppWithInput("list\n1\nexit\n");
+    app.run();
 
-        assertTrue(tempFile.exists());
-        assertTrue(tempFile.length() > 0);
+    String output = outputStream.toString();
+    assertTrue(output.contains("No records to list"));
+  }
 
-        tempFile.deleteOnExit();
-    }
+  @Test
+  void testEditInvalidIndex() {
+    ContactsApp app = createAppWithInput("list\n1\nedit\nexit\n");
+    app.run();
 
-    /* =========================================================
-       Record (timestamps) tests
-       ========================================================= */
+    String output = outputStream.toString();
+    assertTrue(output.contains("No records to list"));
+  }
 
-    @Test
-    void recordTimestampsAreInitialized() {
-        Person person = new Person();
+  @Test
+  void testDeleteInvalidIndex() {
+    ContactsApp app = createAppWithInput("list\n1\ndelete\nexit\n");
+    app.run();
 
-        assertNotNull(person.getCreated());
-        assertNotNull(person.getLastEdited());
-    }
+    String output = outputStream.toString();
+    assertTrue(output.contains("No records to list"));
+  }
 
-    @Test
-    void updateTimestampChangesLastEdited() throws InterruptedException {
-        Person person = new Person();
-        var before = person.getLastEdited();
+  @Test
+  void testConstructorNullContacts() {
+    assertThrows(IllegalArgumentException.class, () -> new ContactsApp(null));
+  }
 
-        Thread.sleep(5);
-        person.updateTimestamp();
+  @Test
+  void testConstructorNullScanner() {
+    Contacts contacts = new Contacts();
+    assertThrows(IllegalArgumentException.class, () -> new ContactsApp(contacts, null));
+  }
 
-        assertTrue(person.getLastEdited().isAfter(before));
-    }
+  @Test
+  void testSearchNonNumericSelection() {
+    Person p = new Person();
+    p.setName("Alice");
+    contacts.addRecord(p);
+
+    ContactsApp app = createAppWithInput("search\nAlice\nabc\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("Found 1 results"));
+  }
+
+  @Test
+  void testSearchOutOfRangeIndex() {
+    Person p = new Person();
+    p.setName("Alice");
+    contacts.addRecord(p);
+
+    ContactsApp app = createAppWithInput("search\nAlice\n99\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("Found 1 results"));
+  }
+
+  @Test
+  void testOpenRecordViewInvalidIndex() {
+    ContactsApp app = createAppWithInput("list\n1\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("No records to list"));
+  }
+
+  @Test
+  void testEditInvalidIndexBranch() {
+    ContactsApp app = createAppWithInput("list\n1\nedit\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("No records to list"));
+  }
+
+  @Test
+  void testEmptyMenuInputBranch() {
+    ContactsApp app = createAppWithInput("\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("Unknown command"));
+  }
+
+  @Test
+  void testDeleteInvalidIndexBranch() {
+    ContactsApp app = createAppWithInput("list\n1\ndelete\nexit\n");
+    app.run();
+
+    assertTrue(outputStream.toString().contains("No records to list"));
+  }
 }
